@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="720" viewBox="0 0 980 720" font-family="Segoe UI, Arial, sans-serif">
+  <!-- Background -->
+  <rect width="980" height="720" fill="#f4f7fb"/>
+  <text x="490" y="38" text-anchor="middle" font-size="26" font-weight="700" fill="#1b2a4a">TurtleBot IITD — 3-Motor + Encoder Wiring (Teensy 4.1)</text>
+  <line x1="40" y1="52" x2="940" y2="52" stroke="#c3cee0" stroke-width="2"/>
+
+  <!-- ================= TEENSY ================= -->
+  <rect x="390" y="240" width="200" height="320" rx="14" fill="#0f9d58" stroke="#0b6e3d" stroke-width="3"/>
+  <text x="490" y="272" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">Teensy 4.1</text>
+  <text x="490" y="294" text-anchor="middle" font-size="12" fill="#d7f3e3">microcontroller</text>
+
+  <!-- Teensy left pins -->
+  <g font-size="13" fill="#ffffff" font-weight="600">
+    <circle cx="390" cy="320" r="5" fill="#ffd24a"/><text x="402" y="324">9  ENA</text>
+    <circle cx="390" cy="344" r="5" fill="#ffd24a"/><text x="402" y="348">8  IN1</text>
+    <circle cx="390" cy="368" r="5" fill="#ffd24a"/><text x="402" y="372">6  IN2</text>
+    <circle cx="390" cy="392" r="5" fill="#4aa8ff"/><text x="402" y="396">4  IN3</text>
+    <circle cx="390" cy="416" r="5" fill="#4aa8ff"/><text x="402" y="420">3  IN4</text>
+    <circle cx="390" cy="440" r="5" fill="#4aa8ff"/><text x="402" y="444">2  ENB</text>
+    <circle cx="390" cy="478" r="5" fill="#ff7ab8"/><text x="402" y="482">5  EN</text>
+    <circle cx="390" cy="502" r="5" fill="#ff7ab8"/><text x="402" y="506">10 IN3</text>
+    <circle cx="390" cy="526" r="5" fill="#ff7ab8"/><text x="402" y="530">11 IN4</text>
+  </g>
+
+  <!-- Teensy right pins (encoders) -->
+  <g font-size="13" fill="#ffffff" font-weight="600" text-anchor="end">
+    <circle cx="590" cy="320" r="5" fill="#ffd24a"/><text x="578" y="324">A enc 15/16</text>
+    <circle cx="590" cy="392" r="5" fill="#4aa8ff"/><text x="578" y="396">B enc 12/14</text>
+    <circle cx="590" cy="478" r="5" fill="#ff7ab8"/><text x="578" y="482">C enc 18/17</text>
+    <circle cx="590" cy="544" r="5" fill="#9aa6b8"/><text x="578" y="548">GND / 5V</text>
+  </g>
+
+  <!-- ================= DRIVER 1 ================= -->
+  <rect x="70" y="120" width="220" height="150" rx="12" fill="#1a73e8" stroke="#0b47a1" stroke-width="3"/>
+  <text x="180" y="148" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Driver 1 (L298N)</text>
+  <text x="180" y="168" text-anchor="middle" font-size="12" fill="#cfe0ff">Motors A &amp; B</text>
+  <g font-size="12" fill="#ffffff">
+    <text x="90" y="196">ENA  IN1  IN2  |  ENB  IN3  IN4</text>
+    <text x="90" y="232" font-size="11" fill="#cfe0ff">OUT1/OUT2 → Motor A</text>
+    <text x="90" y="250" font-size="11" fill="#cfe0ff">OUT3/OUT4 → Motor B</text>
+  </g>
+
+  <!-- ================= DRIVER 2 ================= -->
+  <rect x="690" y="120" width="220" height="150" rx="12" fill="#d93025" stroke="#8c1d16" stroke-width="3"/>
+  <text x="800" y="148" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Driver 2 (L298N)</text>
+  <text x="800" y="168" text-anchor="middle" font-size="12" fill="#ffd7d3">Motor C</text>
+  <g font-size="12" fill="#ffffff">
+    <text x="710" y="196">EN   IN3   IN4</text>
+    <text x="710" y="232" font-size="11" fill="#ffd7d3">OUT3/OUT4 → Motor C</text>
+  </g>
+
+  <!-- ================= MOTORS ================= -->
+  <g>
+    <circle cx="130" cy="430" r="40" fill="#ffd24a" stroke="#b8901a" stroke-width="3"/>
+    <text x="130" y="427" text-anchor="middle" font-size="18" font-weight="700" fill="#5a4506">A</text>
+    <text x="130" y="445" text-anchor="middle" font-size="10" fill="#5a4506">+ encoder</text>
+  </g>
+  <g>
+    <circle cx="130" cy="560" r="40" fill="#4aa8ff" stroke="#1361a8" stroke-width="3"/>
+    <text x="130" y="557" text-anchor="middle" font-size="18" font-weight="700" fill="#06335a">B</text>
+    <text x="130" y="575" text-anchor="middle" font-size="10" fill="#06335a">+ encoder</text>
+  </g>
+  <g>
+    <circle cx="850" cy="430" r="40" fill="#ff7ab8" stroke="#a83171" stroke-width="3"/>
+    <text x="850" y="427" text-anchor="middle" font-size="18" font-weight="700" fill="#5a0636">C</text>
+    <text x="850" y="445" text-anchor="middle" font-size="10" fill="#5a0636">+ encoder</text>
+  </g>
+
+  <!-- ===== WIRES: Teensy -> Driver1 (control) ===== -->
+  <path d="M390 340 C 330 330, 320 220, 290 210" stroke="#ffb300" stroke-width="3" fill="none"/>
+  <path d="M390 416 C 330 410, 320 230, 290 220" stroke="#1a73e8" stroke-width="3" fill="none"/>
+
+  <!-- Driver1 -> Motors -->
+  <path d="M180 270 C 170 340, 150 380, 135 392" stroke="#ffb300" stroke-width="3" fill="none"/>
+  <path d="M200 270 C 200 420, 170 500, 150 522" stroke="#1a73e8" stroke-width="3" fill="none"/>
+
+  <!-- Teensy -> Driver2 (control) -->
+  <path d="M390 502 C 320 540, 760 560, 760 270" stroke="#ff7ab8" stroke-width="3" fill="none"/>
+  <!-- Driver2 -> Motor C -->
+  <path d="M820 270 C 830 340, 845 380, 850 388" stroke="#ff7ab8" stroke-width="3" fill="none"/>
+
+  <!-- Encoder wires Motors -> Teensy right -->
+  <path d="M170 425 C 300 400, 320 320, 585 320" stroke="#b8901a" stroke-width="2.5" fill="none" stroke-dasharray="6 4"/>
+  <path d="M170 555 C 300 470, 320 392, 585 392" stroke="#1361a8" stroke-width="2.5" fill="none" stroke-dasharray="6 4"/>
+  <path d="M810 430 C 700 470, 660 478, 595 478" stroke="#a83171" stroke-width="2.5" fill="none" stroke-dasharray="6 4"/>
+
+  <!-- Legend -->
+  <rect x="40" y="630" width="900" height="60" rx="10" fill="#ffffff" stroke="#c3cee0" stroke-width="1.5"/>
+  <text x="56" y="652" font-size="13" font-weight="700" fill="#1b2a4a">Legend:</text>
+  <line x1="120" y1="648" x2="150" y2="648" stroke="#ffb300" stroke-width="3"/><text x="156" y="652" font-size="12" fill="#333">Motor A path</text>
+  <line x1="260" y1="648" x2="290" y2="648" stroke="#1a73e8" stroke-width="3"/><text x="296" y="652" font-size="12" fill="#333">Motor B path</text>
+  <line x1="400" y1="648" x2="430" y2="648" stroke="#ff7ab8" stroke-width="3"/><text x="436" y="652" font-size="12" fill="#333">Motor C path</text>
+  <line x1="540" y1="648" x2="570" y2="648" stroke="#666" stroke-width="2.5" stroke-dasharray="6 4"/><text x="576" y="652" font-size="12" fill="#333">Encoder signal (dashed)</text>
+  <text x="56" y="676" font-size="11" fill="#777">Note: Motor A/B encoder connectors are swapped in hardware — A reads pins 15/16, B reads pins 12/14. Connect all GNDs common.</text>
+</svg>
