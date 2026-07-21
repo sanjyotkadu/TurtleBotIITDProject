@@ -1,0 +1,18 @@
+Kiwi Drive – Release Notes
+
+Bugs Fixed
+
+Motors moved abruptly on power-up — fixed by waiting for a valid iBUS link before calibrating stick centers.
+Boot-time calibration could lock in wrong centers if sticks weren't at rest yet — fixed by continuously tracking center while disarmed.
+Center tracking got stuck due to integer truncation (centers were int, dropping small fractional corrections) — fixed by switching centers to float.
+Enable switch could arm instantly on power-up even with bad/garbage stick data — fixed by requiring a fresh OFF→ON switch flip.
+Motors could arm with sticks not centered — fixed by requiring all sticks centered at the moment of arming.
+
+Features Added
+
+Status LED on the onboard LED (pin 13) — shows link status, ready state, and armed state without needing a laptop/serial monitor.
+Debug serial output showing raw channel values and live calibration centers for easy diagnosis.
+Clear arm sequence: center sticks → LED goes solid ON → flip enable switch OFF then ON → LED goes solid OFF = armed.
+
+Current Status
+Confirmed working — motors no longer move on startup, and arming behaves as expected via the RC switch + centered sticks.
