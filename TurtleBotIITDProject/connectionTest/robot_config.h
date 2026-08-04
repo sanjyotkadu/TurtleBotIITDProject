@@ -210,9 +210,9 @@
 // for that wheel, or PID will fight itself (positive feedback -> runaway).
 // If a wheel accelerates uncontrollably the instant PID engages, flip its
 // sign here (+1 <-> -1). See the "MUST DO before enabling" note in PID.cpp.
-#define PID_ENC_SIGN_A         -1
-#define PID_ENC_SIGN_B         -1
-#define PID_ENC_SIGN_C         -1
+#define PID_ENC_SIGN_A         +1
+#define PID_ENC_SIGN_B         +1
+#define PID_ENC_SIGN_C         +1
 
 // ------------------------------------------------------------
 // EMERGENCY STOP (see emergencyStop.h / emergencyStop.cpp)
