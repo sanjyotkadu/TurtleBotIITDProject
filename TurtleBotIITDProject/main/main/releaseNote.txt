@@ -1,0 +1,19 @@
+Kiwi Drive – Release Notes
+
+Bugs Fixed
+1. Motors moved abruptly on power-up — fixed by waiting for a valid iBUS link before calibrating stick centers.
+2. Boot-time calibration could lock in wrong centers if sticks weren't at rest yet — fixed by continuously tracking center while disarmed.
+3. Center tracking got stuck due to integer truncation (centers were int, dropping small fractional corrections) — fixed by switching centers to float.
+4. Enable switch could arm instantly on power-up even with bad/garbage stick data — fixed by requiring a fresh OFF->ON switch flip.
+5. Motors could arm with sticks not centered — fixed by requiring all sticks centered at the moment of arming.
+6. Left/right stick assignment mismatch — confirmed actual channel mapping by bench test (CH0 = right stick L/R, CH3 = left stick L/R) and documented it in robot_config.h so it matches the code.
+7. Left stick caused sideways drift instead of spin, and right stick caused spin instead of strafe — root cause was Motor C wired in reverse relative to Motors A and B. Fixed by flipping DIR_C_CW from -1 to +1 in robot_config.h.
+
+Features Added
+1. Status LED on the onboard LED (pin 13) — shows link status, ready state, and armed state without needing a laptop/serial monitor.
+2. Debug serial output showing raw channel values and live calibration centers for easy diagnosis.
+3. Debug serial output showing per-motor commanded power and actual PWM value for each wheel (C/A/B) for movement diagnosis.
+4. Clear arm sequence: center sticks -> LED goes solid ON -> flip enable switch OFF then ON -> LED goes solid OFF = armed.
+
+Current Status
+Confirmed working — motors no longer move on startup, arming behaves as expected via the RC switch + centered sticks, left stick spins the robot in place, and right stick strafes it left/right correctly.
