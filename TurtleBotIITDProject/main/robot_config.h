@@ -161,9 +161,17 @@
 // ------------------------------------------------------------
 // RC DRIVE TUNING
 // ------------------------------------------------------------
-#define MAX_LINEAR_SPEED_MM_S    300.0   // full-stick translation speed
+#define MAX_LINEAR_SPEED_MM_S    130.0   // full-stick translation speed
 #define MAX_ANGULAR_SPEED_RAD_S  2.0     // full-stick rotation speed
 #define MOTOR_PWM_MAX            255     // analogWrite ceiling
+
+// Active braking on stop. When a wheel is commanded to exactly 0
+// (neutral / PID idle), 1 = short the motor windings for a fast
+// electrical stop, 0 = let the motor coast (free-wheel) to a stop.
+// On a stand a coasting omni wheel free-spins for a couple of seconds;
+// braking stops it almost at once. On the ground the difference is much
+// smaller. The emergency stop is unaffected — it always cuts drive.
+#define MOTOR_BRAKE_ON_STOP      1
 
 // Wheel mounting angles (deg), standard math convention:
 // 0 deg = robot's right (+x), 90 deg = front (+y), CCW positive.
@@ -189,9 +197,9 @@
 // behaves differently. Ki/Kd are in standard per-second units; the
 // library scales them by the sample time, so do NOT pre-scale them.
 // ------------------------------------------------------------
-#define PID_KP                 0.0020   // proportional  (power per mm/s of error)
-#define PID_KI                 0.0040   // integral      (per second)
-#define PID_KD                 0.0000   // derivative    (start at 0, add last)
+#define PID_KP               0.002/// 0.0045// 0.0020   // proportional  (power per mm/s of error)
+#define PID_KI                0.004// 0.0040   // integral      (per second)
+#define PID_KD                0.0// 0.0000   // derivative    (start at 0, add last)
 
 // Control-loop rate. PID runs on a FIXED interval (not every loop()) so
 // dt is stable and each interval accumulates enough encoder counts to
@@ -203,7 +211,7 @@
 // on the ground and clock its speed; set this to that value. Too high and
 // the wheel can never reach setpoint (integral winds up); too low and it
 // saturates before full stick.
-#define PID_MAX_WHEEL_SPEED_MM_S   300.0
+#define PID_MAX_WHEEL_SPEED_MM_S   130.0
 
 // Encoder direction alignment. The encoder's +/- count direction (set by
 // C1/C2 wiring) must match the sign of the PRE-direction kinematic command
@@ -213,6 +221,14 @@
 #define PID_ENC_SIGN_A         -1
 #define PID_ENC_SIGN_B         -1
 #define PID_ENC_SIGN_C         -1
+
+// Zero-command deadband. When a wheel's normalized command is smaller
+// than this, that wheel is hard-stopped (PWM 0) and its integrator is
+// cleared, instead of running PID toward "0 speed". Without this the
+// integral term left over from the last move keeps a little PWM on the
+// wheel at neutral (and holds the front wheel powered during pure
+// straight-line moves). 0.01 = 1% of full stick.
+#define PID_CMD_DEADBAND       0.01
 
 // ------------------------------------------------------------
 // EMERGENCY STOP (see emergencyStop.h / emergencyStop.cpp)

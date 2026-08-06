@@ -54,6 +54,10 @@ static WheelPowers heldPowers = {0.0f, 0.0f, 0.0f};
 // Last measured speeds (mm/s, pre-DIR frame) for telemetry.
 static float measSpeedA = 0.0f, measSpeedB = 0.0f, measSpeedC = 0.0f;
 
+// Per-wheel "commanded to stop" latch, so we clear the integrator only
+// once when a wheel goes idle (not every loop it stays idle).
+static bool idleA = false, idleB = false, idleC = false;
+
 static void configureController(PID &pid) {
   // Output is a normalized motor power, so the loop must be free to drive
   // both directions. (Library default is 0..255 — that would forbid
@@ -75,6 +79,7 @@ void pidInit() {
 
   heldPowers.front_C = heldPowers.backLeft_A = heldPowers.backRight_B = 0.0f;
   measSpeedA = measSpeedB = measSpeedC = 0.0f;
+  idleA = idleB = idleC = false;
 }
 
 void pidResetAll() {
@@ -94,6 +99,7 @@ void pidResetAll() {
   lastMeasMs = millis();
 
   heldPowers.front_C = heldPowers.backLeft_A = heldPowers.backRight_B = 0.0f;
+  idleA = idleB = idleC = false;
 }
 
 // Convert one wheel's encoder delta into speed (mm/s) in the pre-DIR
@@ -103,6 +109,46 @@ static float measureWheelSpeed(long nowCount, long &lastCount,
   long delta = nowCount - lastCount;
   lastCount = nowCount;
   return encSign * (delta * mmPerCount) / dt;   // (counts * mm/count) / s
+}
+
+// Zero-command deadband for one wheel. When the command is essentially
+// neutral, freeze the controller (MANUAL makes Compute() a no-op) and
+// command zero power, so a leftover integral term can't keep the wheel
+// creeping after the stick returns to center. When the command comes back,
+// the MANUAL->AUTOMATIC transition re-baselines the integrator to 0.
+static void applyDeadband(PID &pid, float command, double &out) {
+  if (fabs(command) < PID_CMD_DEADBAND) {
+    pid.SetMode(MANUAL);
+    out = 0.0;
+  } else {
+    pid.SetMode(AUTOMATIC);
+  }
+}
+
+// Run one wheel's controller for this loop.
+//   cmd  : normalized command for this wheel (pre-DIR, from kiwiMix)
+//   pid  : that wheel's library controller
+//   out  : that wheel's Output variable (written here)
+//   idle : that wheel's idle latch
+// If the command is within the deadband we hard-stop the wheel (out = 0)
+// and clear the integrator once, so leftover integral can't hold PWM on a
+// wheel that should be still. Otherwise we run the normal PID (Compute()
+// self-gates on the sample time).
+static void runWheel(PID &pid, float cmd, double &out, bool &idle) {
+  if (fabs(cmd) < PID_CMD_DEADBAND) {
+    if (!idle) {
+      // Entering idle: zero the output and bounce MANUAL->AUTOMATIC so the
+      // library re-initializes with ITerm = 0 (a clean integrator).
+      out = 0.0;
+      pid.SetMode(MANUAL);
+      pid.SetMode(AUTOMATIC);
+      idle = true;
+    }
+    out = 0.0;   // hold a hard zero while idle
+  } else {
+    idle = false;
+    pid.Compute();
+  }
 }
 
 WheelPowers pidUpdate(WheelPowers target) {
@@ -128,17 +174,30 @@ WheelPowers pidUpdate(WheelPowers target) {
     inC = measSpeedC;
   }
 
+
   // Setpoints: normalized command -> speed setpoint (mm/s). Cheap, so
   // update every call; the library only acts on the sample interval.
   setA = target.backLeft_A  * PID_MAX_WHEEL_SPEED_MM_S;
   setB = target.backRight_B * PID_MAX_WHEEL_SPEED_MM_S;
   setC = target.front_C     * PID_MAX_WHEEL_SPEED_MM_S;
 
-  // Standard PID library usage: call Compute() every loop; it self-gates
-  // on SetSampleTime() and only recomputes Output when a tick is due.
-  pidA.Compute();
+
+  // Hard-stop + freeze any wheel whose command is in the neutral deadband.
+  applyDeadband(pidA, target.backLeft_A,  outA);
+  applyDeadband(pidB, target.backRight_B, outB);
+  applyDeadband(pidC, target.front_C,     outC);
+
+  pidA.Compute();   // no-op for any wheel currently held in MANUAL
   pidB.Compute();
   pidC.Compute();
+
+
+  // Run each wheel. Near-zero commands hard-stop the wheel and clear its
+  // integrator; otherwise the library computes (self-gating on the sample
+  // time). This is what keeps a centered stick from leaving residual PWM.
+  runWheel(pidA, target.backLeft_A,  outA, idleA);
+  runWheel(pidB, target.backRight_B, outB, idleB);
+  runWheel(pidC, target.front_C,     outC, idleC);
 
   heldPowers.backLeft_A  = (float)outA;
   heldPowers.backRight_B = (float)outB;

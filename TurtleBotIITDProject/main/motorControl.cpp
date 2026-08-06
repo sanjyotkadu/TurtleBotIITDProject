@@ -16,16 +16,22 @@ void driveMotor(uint8_t enPin, uint8_t in1Pin, uint8_t in2Pin, float power) {
   if (power > 0.0f) {
     digitalWrite(in1Pin, HIGH);
     digitalWrite(in2Pin, LOW);
+    analogWrite(enPin, (int)(power * MOTOR_PWM_MAX));
   } else if (power < 0.0f) {
     digitalWrite(in1Pin, LOW);
     digitalWrite(in2Pin, HIGH);
+    analogWrite(enPin, (int)(-power * MOTOR_PWM_MAX));
   } else {
+    // Stopped. On the L298N, EN high + both inputs equal shorts the motor
+    // windings (fast brake); EN low disables the bridge (coast).
     digitalWrite(in1Pin, LOW);
     digitalWrite(in2Pin, LOW);
+#if MOTOR_BRAKE_ON_STOP
+    analogWrite(enPin, MOTOR_PWM_MAX);   // brake — fast electrical stop
+#else
+    analogWrite(enPin, 0);               // coast — motor free-wheels
+#endif
   }
-
-  int pwmValue = (int)(fabs(power) * MOTOR_PWM_MAX);
-  analogWrite(enPin, pwmValue);
 }
 
 void stopAllMotors() {
