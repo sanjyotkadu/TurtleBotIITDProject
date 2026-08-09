@@ -1,0 +1,19 @@
+22:05:44.710 ->   [ OK ] DIRECTION: count reverses — C2 (direction) wired.
+22:05:44.710 ->   => Motor B: PASS
+22:05:44.710 -> 
+22:05:44.710 -> --- Testing Motor C ---
+22:05:45.651 ->   forward counts  A=0  B=-127  C=-1172
+22:05:45.651 ->   [WARN] Encoder C moved, but another encoder also changed — check for a
+22:05:45.651 ->          shared/crossed line or a loose connector.
+22:05:46.628 ->   reverse count   C=1038
+22:05:46.628 ->   [ OK ] DIRECTION: count reverses — C2 (direction) wired.
+22:05:46.628 ->   => Motor C: PASS
+22:05:46.628 -> 
+22:05:46.628 -> ===================== SUMMARY ========================
+22:05:46.628 ->   Motor A / Encoder A : PASS
+22:05:46.628 ->   Motor B / Encoder B : PASS
+22:05:46.628 ->   Motor C / Encoder C : PASS
+22:05:46.628 -> =====================================================
+22:05:46.628 ->   All connections good. Next: run encoderTest.ino for PID signs.
+22:05:46.628 -> 
+1
