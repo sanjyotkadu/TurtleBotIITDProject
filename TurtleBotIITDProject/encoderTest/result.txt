@@ -1,0 +1,14 @@
+22:18:48.622 -> === Powered test: Wheel A (commanding POSITIVE pre-DIR) ===
+22:18:49.628 ->   raw encoder delta      : -1075
+22:18:49.628 ->   after PID_ENC_SIGN_A (-1) : 1075
+22:18:49.628 ->   RESULT: OK  -> keep PID_ENC_SIGN_A = -1
+22:18:49.628 -> 
+22:18:49.628 -> === Powered test: Wheel B (commanding POSITIVE pre-DIR) ===
+22:18:50.604 ->   raw encoder delta      : -1088
+22:18:50.604 ->   after PID_ENC_SIGN_B (-1) : 1088
+22:18:50.604 ->   RESULT: OK  -> keep PID_ENC_SIGN_B = -1
+22:18:50.604 -> 
+22:18:50.604 -> === Powered test: Wheel C (commanding POSITIVE pre-DIR) ===
+22:18:51.610 ->   raw encoder delta      : -1097
+22:18:51.610 ->   after PID_ENC_SIGN_C (-1) : 1097
+22:18:51.610 ->   RESULT: OK  -> keep PID_ENC_SIGN_C = -1
