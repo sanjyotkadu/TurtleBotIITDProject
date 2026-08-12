@@ -358,6 +358,11 @@
 
 #define NAV_SETTLE_MS                300     // pause between legs, and how long the turn must stay in tolerance
 
+// Waypoint follower (navRunWaypointSequence()) — reuses NAV_DRIVE_SPEED,
+// NAV_TURN_*, and NAV_SETTLE_MS above for each turn/drive leg; this is
+// the only setting specific to the waypoint list itself.
+#define NAV_WAYPOINT_TOLERANCE_MM    50.0f    // a waypoint within this radius counts as "reached" - skip it
+
 // ------------------------------------------------------------
 // QUICK REFERENCE — Pin Allocation Summary
 //

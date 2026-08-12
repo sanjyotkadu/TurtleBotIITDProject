@@ -15,6 +15,27 @@ static float wrapPi(float a) {
   return a;
 }
 
+// Set true only while a sequence launched from CH2 (the nav trigger
+// stick) is running; then releasing the stick back below
+// NAV_TRIGGER_THRESHOLD aborts immediately and hands control back to the
+// joystick. Left false for Serial-triggered runs ('n'/'w') since CH2 has
+// no spring return and just sits wherever the pilot last left it -
+// gating those on it would abort them the instant they started. Set at
+// the top of navRunDemoSequence()/navRunWaypointSequence() on every
+// call, so it can't carry a stale value from a previous run.
+static bool s_abortOnTriggerRelease = false;
+
+// During a pure straight leg (Vx=0), kiwiMix() gives the A/B wheels a
+// command of only (sqrt(3)/2)*Vy each - i.e. each wheel physically rolls
+// cos(30 deg) as far as the robot's chassis actually travels, since they
+// sit 30 deg off the direction of travel (front wheel C carries none of
+// it at all). navDriveStraight() below divides the wheel-rolled distance
+// by this same factor to recover the robot's real ground distance -
+// without it, the loop keeps going until the WHEELS log the full
+// requested distance, by which point the chassis has gone ~1/0.866 =
+// 15.5% farther than asked.
+static const float NAV_WHEEL_TRAVEL_RATIO = 0.8660254f;   // cos(30 deg) = sqrt(3)/2, matches kiwiMix()'s Vy coefficient
+
 // Mirrors driveturBot()'s pipeline in main.ino (kinematics -> PID ->
 // DIR-corrected motor output) so autonomous moves go through the exact
 // same path RC-driven ones do. Duplicated rather than shared because
@@ -36,6 +57,10 @@ static bool navShouldAbort() {
   if (estopActive())  return true;   // E-stop latched
   if (rcFailsafe())    return true;   // RC link lost
   if (!rcEnabled())     return true;   // pilot disarmed / switch off
+  if (s_abortOnTriggerRelease &&
+      rcRawChannel(IBUS_CH_NAV_TRIGGER) <= NAV_TRIGGER_THRESHOLD) {
+    return true;   // pilot pulled CH2 back down - hand control back to the joystick now
+  }
   return false;
 }
 
@@ -64,7 +89,11 @@ static bool navDriveStraight(float distanceMM, float speed) {
 
     float distA = fabs((encoderCount('A') - startA) * MOTOR_A_MM_PER_COUNT);
     float distB = fabs((encoderCount('B') - startB) * MOTOR_B_MM_PER_COUNT);
-    float traveled = (distA + distB) * 0.5f;
+    float wheelTraveled = (distA + distB) * 0.5f;
+    // Project the wheel-rolled distance back to robot ground distance
+    // (see NAV_WHEEL_TRAVEL_RATIO above) so this compares correctly
+    // against distanceMM instead of overshooting by ~15.5%.
+    float traveled = wheelTraveled / NAV_WHEEL_TRAVEL_RATIO;
 
     if (millis() - lastPrint >= 150) {
       lastPrint = millis();
@@ -163,7 +192,9 @@ static bool navSettle(unsigned long ms) {
   return true;
 }
 
-bool navRunDemoSequence() {
+bool navRunDemoSequence(bool abortIfTriggerReleased) {
+  s_abortOnTriggerRelease = abortIfTriggerReleased;
+
   if (!rcEnabled()) {
     Serial.println("[NAV] must be armed before running the demo sequence.");
     return false;
@@ -182,5 +213,88 @@ bool navRunDemoSequence() {
   if (!navDriveStraight(NAV_DRIVE_DISTANCE_MM, NAV_DRIVE_SPEED)) return false;
 
   Serial.println("[NAV] demo sequence complete.");
+  return true;
+}
+
+bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortIfTriggerReleased) {
+  s_abortOnTriggerRelease = abortIfTriggerReleased;
+
+  if (!rcEnabled()) {
+    Serial.println("[NAV] must be armed before running a waypoint sequence.");
+    return false;
+  }
+  if (waypoints == nullptr || count <= 0) {
+    Serial.println("[NAV] waypoint list is empty.");
+    return false;
+  }
+  if (!imu_healthy()) {
+    Serial.println("[NAV] IMU not healthy - aborting waypoint sequence.");
+    return false;
+  }
+
+  Serial.print("[NAV] starting waypoint sequence: ");
+  Serial.print(count);
+  Serial.println(" waypoint(s)");
+  pidResetAll();
+  imu_resetHeadingHold();
+
+  // Dead-reckoned pose: (0,0) is wherever the robot is right now, and the
+  // frame's angle reference is whatever heading the IMU currently calls
+  // zero. Each leg below only trusts the encoders' *distance* and the
+  // heading it just turned to — there's no absolute position sensor, so
+  // this drifts over a long run just like any odometry estimate, but is
+  // plenty for a handful of chained waypoints.
+  float x = 0.0f, y = 0.0f;
+
+  for (int i = 0; i < count; i++) {
+    if (navShouldAbort()) {
+      stopAllMotors();
+      Serial.println("[NAV] waypoint sequence aborted.");
+      return false;
+    }
+
+    float dx = waypoints[i].x_mm - x;
+    float dy = waypoints[i].y_mm - y;
+    float distance = sqrtf(dx * dx + dy * dy);
+
+    Serial.print("[NAV] waypoint ");
+    Serial.print(i + 1);
+    Serial.print("/");
+    Serial.print(count);
+    Serial.print(": target (");
+    Serial.print(waypoints[i].x_mm, 0);
+    Serial.print(", ");
+    Serial.print(waypoints[i].y_mm, 0);
+    Serial.print(") from (");
+    Serial.print(x, 0);
+    Serial.print(", ");
+    Serial.print(y, 0);
+    Serial.print(") dist=");
+    Serial.println(distance, 0);
+
+    if (distance < NAV_WAYPOINT_TOLERANCE_MM) {
+      Serial.println("[NAV] already within tolerance - skipping.");
+      continue;
+    }
+
+    // Go-to-goal: face the goal (atan2 of the remaining vector), then
+    // drive straight to it. Same two primitives navRunDemoSequence()
+    // uses, just re-aimed at each waypoint in turn.
+    float targetHeadingRad = atan2f(dy, dx);
+    float turnDeg = wrapPi(targetHeadingRad - imu_headingRad()) * 180.0f / (float)M_PI;
+
+    if (!navTurn(turnDeg))                            return false;
+    if (!navSettle(NAV_SETTLE_MS))                     return false;
+    if (!navDriveStraight(distance, NAV_DRIVE_SPEED))  return false;
+    if (!navSettle(NAV_SETTLE_MS))                     return false;
+
+    // Advance the dead-reckoned pose by the leg we *commanded*
+    // (targetHeadingRad, distance) rather than re-sampling the IMU here —
+    // that's what navDriveStraight() actually held during the leg.
+    x += distance * cosf(targetHeadingRad);
+    y += distance * sinf(targetHeadingRad);
+  }
+
+  Serial.println("[NAV] waypoint sequence complete.");
   return true;
 }

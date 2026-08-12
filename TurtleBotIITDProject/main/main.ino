@@ -13,8 +13,11 @@
  *   imu.*             — BNO085 heading (yaw) + heading-hold trim
  *   diagnostics.*      — status LED + serial debug output
  *   startupSequence.* — blocking boot flow (link wait + calibration)
- *   navigation.*       — blocking autonomous demo (straight->turn->straight),
- *                        triggered by CH2 stick-up (or 'n' over Serial) while armed
+ *   navigation.*       — blocking autonomous demo (straight->turn->straight,
+ *                        'n' over Serial) and a go-to-goal waypoint follower
+ *                        (CH2 stick-up, or 'w' over Serial - see
+ *                        DEMO_WAYPOINTS below). CH2 back down mid-run aborts
+ *                        immediately and returns control to the joystick.
  *
  * Control flow:
  *   setup() -> init every module, then run startupSequence().
@@ -34,6 +37,20 @@
 #include "emergencyStop.h"
 #include "navigation.h"
 #include <math.h>
+
+// Example 5-waypoint path for bench-testing navRunWaypointSequence()
+// (navigation.h/.cpp). Coordinates are millimetres, relative to wherever
+// the robot is standing when the sequence starts (dead-reckoned from
+// there — no absolute position sensor). Edit freely; this is just a demo
+// path, not tied to any real course.
+static const NavWaypoint DEMO_WAYPOINTS[] = {
+  {  300.0f,    0.0f },
+  {  300.0f,  300.0f },
+  {    0.0f,  300.0f },
+  {    0.0f, 600.0f },
+  {  400.0f, 600.0f },
+};
+static const int DEMO_WAYPOINT_COUNT = sizeof(DEMO_WAYPOINTS) / sizeof(DEMO_WAYPOINTS[0]);
 
 // Set to 0 to fall back to the original open-loop path (power -> PWM
 // directly, no encoder feedback). Keep it easy to disable so you can
@@ -109,25 +126,32 @@ void loop() {
   statusLedUpdate(failsafe, enabled, rcSticksCentered());
 
   // Push CH2 (left stick U/D - no spring return, otherwise unused) to the
-  // top and hold to run the autonomous straight->turn->straight demo
+  // top to launch the go-to-goal waypoint follower over DEMO_WAYPOINTS
   // (navigation.h). Rising-edge detected against navTriggerReady so
   // holding the stick up only fires once; it re-arms when the stick
-  // comes back down. Only takes effect while armed.
+  // comes back down. Only takes effect while armed. Passing `true` here
+  // means pulling the stick back down mid-run aborts it immediately
+  // (checked inside navigation.cpp's blocking loops) and hands control
+  // straight back to the joystick on the very next loop() iteration -
+  // no laptop/Serial needed to regain manual control.
   static bool navTriggerReady = true;
   bool navTriggerHigh = rcRawChannel(IBUS_CH_NAV_TRIGGER) > NAV_TRIGGER_THRESHOLD;
   if (navTriggerHigh && navTriggerReady && enabled) {
     navTriggerReady = false;
-    navRunDemoSequence();
+    navRunWaypointSequence(DEMO_WAYPOINTS, DEMO_WAYPOINT_COUNT, true);
   } else if (!navTriggerHigh) {
     navTriggerReady = true;
   }
 
   // 'n' over Serial does the same thing, for bench testing with a laptop
-  // attached. Same armed-only gating.
+  // attached. Same armed-only gating. 'w' runs the go-to-goal waypoint
+  // follower over DEMO_WAYPOINTS above instead.
   if (Serial.available()) {
     char navCmd = Serial.read();
     if ((navCmd == 'n' || navCmd == 'N') && enabled) {
       navRunDemoSequence();
+    } else if ((navCmd == 'w' || navCmd == 'W') && enabled) {
+      navRunWaypointSequence(DEMO_WAYPOINTS, DEMO_WAYPOINT_COUNT);
     }
   }
 
