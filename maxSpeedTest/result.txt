@@ -1,0 +1,20 @@
+22:50:48.132 ->  Max wheel speed measurement (for PID scaling)
+22:50:48.132 -> ==================================================
+22:50:48.132 ->  ROBOT ON A STAND, wheels free. Commands:
+22:50:48.132 ->    a = measure all   1/2/3 = wheel A/B/C   s = stop
+22:50:48.132 ->  Each wheel spins at FULL power for ~2 s.
+22:50:48.132 ->  Battery should be reasonably charged for a fair number.
+22:50:48.132 -> ==================================================
+22:50:48.132 -> 
+22:50:53.133 -> 
+22:50:53.133 -> ============ MAX WHEEL SPEED @ PWM 255 ============
+22:50:55.053 ->   Wheel A : 161.8 mm/s  (2920 counts in 1.00 s)
+22:50:57.358 ->   Wheel B : 174.4 mm/s  (3147 counts in 1.00 s)
+22:50:59.662 ->   Wheel C : 156.9 mm/s  (2832 counts in 1.00 s)
+22:51:00.050 -> ---------------------------------------------------
+22:51:00.050 ->   Slowest wheel: 156.9 mm/s
+22:51:00.050 ->   Suggested PID_MAX_WHEEL_SPEED_MM_S = 133   (85% of slowest; round to a tidy number, e.g. 130)
+22:51:00.050 ->   NOTE: measured on a STAND = free-spin. On the ground
+22:51:00.050 ->   under load it will be lower — see the printed guidance.
+22:51:00.050 -> ===================================================
+22:51:00.050 -> 

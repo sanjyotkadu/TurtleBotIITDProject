@@ -1,0 +1,35 @@
+TB_001_001_IMU_Implementation 
+Date : 11-08-2026
+
+Implementations :
+1. IMU Sensor is tested with program "imuTest" and the angles of rotation is coing correctly
+2. Implemted Propertional algorithm for IMU Heading correction
+3. added MACROS to tune PID of motors and IMU together
+4. added files to check navigation in going straight line and take 90 degree turn
+5. added logic of CH2 to start navigation and CH2 in down direction is joystick control
+
+Tests :
+
+TEST001:
+   procedure :keep the Bot at one place and try to rotate it forcefully to other direction 
+   Result : most of the time the bot is coming back to alinement
+
+TEST002:
+   Procedure : make the ch2 joystick in up direction and see the movement of the bot
+   result : the bot goes straight and takes turns 90 as decoded
+   errorrs : the straight direction needs to be marked
+
+
+conclusion :
+ IMU along with direction control is working fine , more turning is is required 
+ also how much diatance is travelled that needs to be physically measured and tested.
+   
+TB_001_002_WayPoint_Implementation 
+Date : 12-08-2026
+
+Implementations : way point algorithm implemented and working
+
+TB_001_002_WayPoint_Implementation 
+Date : 15-08-2026
+
+Implementations : bug in way point navigation is removed.
