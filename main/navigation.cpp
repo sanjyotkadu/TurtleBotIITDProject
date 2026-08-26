@@ -283,6 +283,11 @@ bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortI
     float targetHeadingRad = atan2f(dy, dx);
     float turnDeg = wrapPi(targetHeadingRad - imu_headingRad()) * 180.0f / (float)M_PI;
 
+    // Drop any PID/heading-hold state carried over from the previous leg
+    // so a fresh waypoint doesn't inherit stale integral/derivative terms.
+    pidResetAll();
+    imu_resetHeadingHold();
+
     if (!navTurn(turnDeg))                            return false;
     if (!navSettle(NAV_SETTLE_MS))                     return false;
     if (!navDriveStraight(distance, NAV_DRIVE_SPEED))  return false;

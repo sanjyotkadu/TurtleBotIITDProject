@@ -81,6 +81,9 @@ void debugPrint(bool enabled, bool failsafe) {
   Serial.print(rcRawChannel(IBUS_CH_VY));
   Serial.print(" OMEGA:");
   Serial.print(rcRawChannel(IBUS_CH_OMEGA));
+  Serial.print(" NAV_CH2:");
+  Serial.print(rcRawChannel(IBUS_CH_NAV_TRIGGER));
+  Serial.print(rcRawChannel(IBUS_CH_NAV_TRIGGER) > NAV_TRIGGER_THRESHOLD ? "(HIGH)" : "(low)");
   Serial.print(" | centers ");
   Serial.print(rcCenterVx(), 1);
   Serial.print("/");
