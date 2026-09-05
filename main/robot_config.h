@@ -364,6 +364,139 @@
 #define NAV_WAYPOINT_TOLERANCE_MM    50.0f    // a waypoint within this radius counts as "reached" - skip it
 
 // ------------------------------------------------------------
+// OBSTACLE AVOIDANCE — SG90 servo + HC-SR04 (see obstacleAvoid.h/.cpp)
+//
+// Same servo-scan approach validated standalone in obstacleAvoidTest/
+// (see that sketch's own header comment for the full design rationale
+// and hardware notes), wired into navigation.cpp's waypoint follower -
+// NOT a separate mode with its own trigger. The CH2/joystick arm
+// mechanism in main.ino is unchanged; this only supplies two things
+// navRunWaypointSequence() calls into for each leg's straight-line
+// portion:
+//
+//   driveStraightWithObstacleCheck() - drives toward the current
+//     target, checking the front-facing HC-SR04 (servo centered at 90
+//     deg) every OBSTACLE_CHECK_CHUNK_MM, reacting in tiers closest
+//     first:
+//       <= OBSTACLE_EMERGENCY_CM : too close to safely turn in place
+//           (might clip the obstacle mid-turn, and the HC-SR04 itself
+//           is nearing its unreliable floor - SONAR_MIN_RANGE_CM).
+//           Stops, reverses OBSTACLE_BACKUP_MM, then keeps trying for
+//           the same target - handled internally, never reported back
+//           as "blocked" since no new direction is needed for it.
+//       <= OBSTACLE_TRIGGER_CM : stops and reports back "blocked" -
+//           picking a new direction is the caller's job (below).
+//       <= OBSTACLE_ALERT_CM : just a warning (print + quick LED
+//           blink), keeps going - not reported back at all.
+//   obstacleFindOpening() - glides the servo LEFT then RIGHT looking
+//     for an opening (SCAN_CONFIRM_STEPS consecutive clear check-points,
+//     SCAN_STEP_DEG apart, before trusting one) and returns the
+//     relative heading to it. navRunWaypointSequence() turns this into
+//     a TEMPORARY waypoint OBSTACLE_AVOID_LEG_MM toward the opening,
+//     inserted ahead of the real target so the real destination is
+//     retried right after - see navigation.cpp for that part. Boxed in
+//     on both sides -> navRunWaypointSequence() waits
+//     OBSTACLE_RETRY_WAIT_MS and rescans, repeating until an opening
+//     turns up or the whole run is aborted (CH2 down/disarm/E-stop/
+//     failsafe) - it does not give up on its own.
+//
+// The EMERGENCY/TRIGGER/ALERT bands are deliberately close together
+// (single-digit to low double-digit cm) - reacting only that close is
+// what the HC-SR04 on this build turned out reliable enough to react
+// to. Because the bands are this tight, OBSTACLE_CHECK_CHUNK_MM had to
+// shrink to match: a bigger blind chunk could sail straight through all
+// three thresholds before the next check ever ran.
+//
+// WIRING: same servo/sonar pins as obstacleAvoidTest.ino -
+//   SG90 signal    -> pin 20   (5-6V supply, common GND - see that
+//                                sketch's header for the power warning)
+//   HC-SR04 TRIG   -> pin 21   (direct - Teensy 3.3V reads as logic-high)
+//   HC-SR04 ECHO   -> pin 22   (THROUGH a level shifter/divider - 5V
+//                                signal, Teensy 4.x pins are NOT 5V
+//                                tolerant)
+//   Alert LED      -> pin 19   (blinks on obstacle detection - NOT the
+//                                Teensy onboard LED, that's pin 13 and
+//                                already used by diagnostics.cpp's
+//                                armed/failsafe status indicator. Needs
+//                                an external LED + current-limiting
+//                                resistor to GND, or just leave it
+//                                unwired - it's diagnostic-only)
+// ------------------------------------------------------------
+#define SERVO_PIN                20
+#define SERVO_MIN_US            544   // pulse width at 0 deg   (SG90 datasheet ~500-600us)
+#define SERVO_MAX_US           2400   // pulse width at 180 deg (SG90 datasheet ~2400-2500us)
+#define SERVO_SLEW_STEP_DEG       1   // degrees per increment while slewing (smooth, not a snap-jump)
+#define SERVO_SLEW_DELAY_MS      20   // ms paused between increments - raise to slow the glide further
+
+#define TRIG_PIN                 21
+#define ECHO_PIN                 22
+#define SONAR_TIMEOUT_US       30000   // pulseIn() timeout for the long-range forward watch (~5m round trip)
+#define SONAR_MAX_RANGE_CM        400   // HC-SR04 datasheet max range
+#define SONAR_MIN_RANGE_CM          4   // empirically measured reliable floor - see obstacleAvoidTest.ino
+
+#define OBSTACLE_LED_PIN          19    // spare pin - NOT 13, see WIRING note above
+#define OBSTACLE_ALERT_BLINKS      3    // quick blinks when an obstacle is first detected
+#define OBSTACLE_ALERT_BLINK_MS  120    // on/off duration per alert blink
+
+#define OBSTACLE_ALERT_CM         15.0f  // early warning (cm) - print + quick blink, keeps driving.
+                                          // Set to the top of this sensor's reliable window (see
+                                          // SONAR_MIN_RANGE_CM's comment) - the earliest point a
+                                          // reading here can actually be trusted.
+#define OBSTACLE_TRIGGER_CM       12.0f  // forward distance (cm) that stops the robot and starts a
+                                          // scan. Raised from 8 - stopping right at 8cm left almost
+                                          // no margin once stopping distance/momentum and the
+                                          // sensor's offset from the front of the chassis are
+                                          // accounted for, so the robot ended up very close to the
+                                          // obstacle by the time it actually stopped.
+#define OBSTACLE_EMERGENCY_CM      6.0f  // too close to turn (cm) - stop and back straight up instead
+#define OBSTACLE_BACKUP_MM        60.0f  // how far to reverse (6cm) on an emergency-close detection
+#define OBSTACLE_BACKUP_SPEED      0.3f  // reverse command, -1..1 scale, used for that backup only
+
+#define SCAN_CLEAR_CM             40.0f  // distance (cm) needed to call a SCANNED direction "clear"
+                                          // enough to escape into - deliberately much more generous
+                                          // than OBSTACLE_TRIGGER_CM above: that constant is "how
+                                          // close is too close in front", this one is "is the
+                                          // escape route actually open", a different question
+#define SCAN_STEP_DEG             10     // re-check for an opening every this many degrees of travel
+#define SCAN_CONFIRM_STEPS         2     // consecutive clear check-points needed before trusting an
+                                          // opening (guards against one narrow gap in the ultrasonic
+                                          // beam, or an obstacle angled enough to reflect the ping
+                                          // away, looking clear when the arc right after it isn't)
+#define SCAN_CHECK_TIMEOUT_US     6000   // short pulseIn() timeout for in-glide checks (~100cm range) -
+                                          // far shorter than SONAR_TIMEOUT_US so a check barely pauses
+                                          // the glide instead of stopping it dead every step
+#define SCAN_DIR_SIGN             (+1)   // maps servo angle -> robot-relative heading, CCW+ to match
+                                          // IMU_YAW_SIGN's convention. +1 -> LEFT is toward 180 deg,
+                                          // RIGHT toward 0 deg; -1 -> reversed. Flip if turning toward
+                                          // a "LEFT" scan result turns the chassis right instead.
+
+#define OBSTACLE_RETRY_WAIT_MS   1000     // pause between rescans while boxed in (blocked on both
+                                          // sides) before trying again - navRunWaypointSequence()
+                                          // keeps retrying rather than giving up permanently
+
+#define OBSTACLE_CHECK_CHUNK_MM    10.0f  // how far the forward watch drives blind between ultrasonic
+                                           // checks while cruising straight - shrunk to match the
+                                           // single-digit-cm thresholds above (a bigger blind chunk
+                                           // could blow straight through them before the next check)
+#define OBSTACLE_CHECK_SAMPLES        3   // quick pings taken at EACH check above, closest one wins
+                                           // (see pingClosestCm() in obstacleAvoid.cpp) - on the bench
+                                           // a single ping right at this sensor's edge-of-range missed
+                                           // a real obstacle more often than it caught one (~1 in 5);
+                                           // requiring only ONE of several samples to see it, instead
+                                           // of trusting one ping outright, fixed that
+#define OBSTACLE_AVOID_LEG_MM     150.0f  // distance (mm) from the current position, toward a found
+                                           // opening, used to place the TEMPORARY waypoint that
+                                           // routes around it (see navigation.cpp). This is the knob
+                                           // to tune if it's swinging too wide around an obstacle
+                                           // before heading back toward the real destination (lower
+                                           // this) or clipping the obstacle on the way back (raise
+                                           // this). Reported too wide at the old 300mm default -
+                                           // shrunk to 150mm, a bit under CHASSIS_DIAMETER_MM (162mm)
+                                           // above, since going much less than the chassis's own
+                                           // width risks the body still overlapping the obstacle when
+                                           // it turns back onto the original heading.
+
+// ------------------------------------------------------------
 // QUICK REFERENCE — Pin Allocation Summary
 //
 //  Pin  2  → EN_B   (Motor B PWM enable)
@@ -381,11 +514,17 @@
 //  Pin 16  → ENC_A2 (Motor A encoder C2 — direction)
 //  Pin 17  → ENC_C1 (Motor C encoder C1 — interrupt)
 //  Pin 18  → ENC_C2 (Motor C encoder C2 — direction)
+//  Pin 19  → OBSTACLE_LED_PIN (obstacle alert blink — needs an external LED, NOT the onboard one on pin 13)
+//  Pin 20  → SERVO_PIN (SG90 obstacle-scan servo signal)
+//  Pin 21  → TRIG_PIN  (HC-SR04 trigger, direct)
+//  Pin 22  → ECHO_PIN  (HC-SR04 echo, THROUGH a level shifter — 5V signal)
+//  Pin 24  → SCL2 (BNO085 IMU, Wire2)
+//  Pin 25  → SDA2 (BNO085 IMU, Wire2)
 //
-//  3.3V → Encoder VCC (all 3 motors)
-//  5V   → L298N logic supply (VSS)
+//  3.3V → Encoder VCC (all 3 motors), BNO085 IMU
+//  5V   → L298N logic supply (VSS), SG90 servo VCC, HC-SR04 VCC
 //  12V  → L298N motor supply (VS) [external]
-//  GND  → Common ground (Teensy + L298N + encoders)
+//  GND  → Common ground (Teensy + L298N + encoders + servo + HC-SR04 + IMU)
 // ------------------------------------------------------------
 
 #endif // ROBOT_CONFIG_H

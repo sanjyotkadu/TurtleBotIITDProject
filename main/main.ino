@@ -18,6 +18,15 @@
  *                        (CH2 stick-up, or 'w' over Serial - see
  *                        DEMO_WAYPOINTS below). CH2 back down mid-run aborts
  *                        immediately and returns control to the joystick.
+ *                        Each waypoint leg drives with obstacle avoidance
+ *                        baked in (see obstacleAvoid.*) - the CH2/joystick
+ *                        arm mechanism itself is unchanged.
+ *   obstacleAvoid.*    — servo + HC-SR04 sensing used by navigation.cpp's
+ *                        waypoint follower: driveStraightWithObstacleCheck()
+ *                        stops if something's in front, obstacleFindOpening()
+ *                        scans LEFT/RIGHT for a way around it. No trigger
+ *                        of its own - it's a service the waypoint follower
+ *                        calls into, not a separate mode.
  *
  * Control flow:
  *   setup() -> init every module, then run startupSequence().
@@ -36,6 +45,7 @@
 #include "PID.h"
 #include "emergencyStop.h"
 #include "navigation.h"
+#include "obstacleAvoid.h"
 #include <math.h>
 
 // Example waypoint path for bench-testing navRunWaypointSequence()
@@ -111,6 +121,7 @@ void setup() {
   encoderInit();
   diagInit();
   imu_init();
+  obstacleAvoidInit();
 
 #if USE_PID
   pidInit();   // must come after encoderInit() — it snapshots the counts

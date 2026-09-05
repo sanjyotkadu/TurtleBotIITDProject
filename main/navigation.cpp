@@ -7,6 +7,7 @@
 #include "PID.h"
 #include "RCControl.h"
 #include "emergencyStop.h"
+#include "obstacleAvoid.h"
 #include <math.h>
 
 static float wrapPi(float a) {
@@ -51,7 +52,7 @@ static void navDrive(float Vx, float Vy, float Omega) {
 
 // Re-polls the safety-critical inputs every iteration of the blocking
 // loops below. Returns true if the sequence must stop right now.
-static bool navShouldAbort() {
+bool navShouldAbort() {
   rcUpdate();
   estopUpdate();
   if (estopActive())  return true;   // E-stop latched
@@ -68,7 +69,7 @@ static bool navShouldAbort() {
 // A/B encoders show distanceMM covered. C isn't used for distance: in
 // this kiwi layout, front_C = -Vx + Omega, so during pure forward/back
 // motion (Vx=0, tiny Omega trim) it carries essentially no travel.
-static bool navDriveStraight(float distanceMM, float speed) {
+bool navDriveStraight(float distanceMM, float speed) {
   if (!imu_healthy()) {
     Serial.println("[NAV] IMU not healthy - aborting straight leg.");
     return false;
@@ -179,7 +180,7 @@ static bool navTurn(float angleDeg) {
 // aborts immediately - i.e. the robot drives leg 1, pauses, and just
 // stops, never turning. This keeps sampling (and safety-polling) through
 // the pause instead.
-static bool navSettle(unsigned long ms) {
+bool navSettle(unsigned long ms) {
   unsigned long start = millis();
   while (millis() - start < ms) {
     if (navShouldAbort()) {
@@ -235,6 +236,7 @@ bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortI
   Serial.print("[NAV] starting waypoint sequence: ");
   Serial.print(count);
   Serial.println(" waypoint(s)");
+  obstacleClearAlert(); // start with the indicator off regardless of how a previous run ended
   pidResetAll();
   imu_resetHeadingHold();
 
@@ -246,25 +248,37 @@ bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortI
   // plenty for a handful of chained waypoints.
   float x = 0.0f, y = 0.0f;
 
-  for (int i = 0; i < count; i++) {
+  // Small LIFO stack of TEMPORARY waypoints inserted ahead of the real
+  // list when an obstacle forces a detour: the most recently pushed one
+  // is targeted first, so multiple obstacles in a row just stack up
+  // instead of losing track of the real destination underneath them.
+  // Popped (not the real list) whenever one is reached, so the real
+  // waypoint below it is naturally retried next, from wherever the
+  // detour left off.
+  const int MAX_DETOUR_DEPTH = 4;
+  NavWaypoint detourStack[MAX_DETOUR_DEPTH];
+  int detourCount = 0;
+
+  int nextIndex = 0;
+  while (nextIndex < count || detourCount > 0) {
     if (navShouldAbort()) {
       stopAllMotors();
+      obstacleClearAlert(); // don't leave the indicator lit if this ends mid-detour
       Serial.println("[NAV] waypoint sequence aborted.");
       return false;
     }
 
-    float dx = waypoints[i].x_mm - x;
-    float dy = waypoints[i].y_mm - y;
+    bool isDetour = (detourCount > 0);
+    NavWaypoint target = isDetour ? detourStack[detourCount - 1] : waypoints[nextIndex];
+
+    float dx = target.x_mm - x;
+    float dy = target.y_mm - y;
     float distance = sqrtf(dx * dx + dy * dy);
 
-    Serial.print("[NAV] waypoint ");
-    Serial.print(i + 1);
-    Serial.print("/");
-    Serial.print(count);
-    Serial.print(": target (");
-    Serial.print(waypoints[i].x_mm, 0);
+    Serial.print(isDetour ? "[NAV] detour target: (" : "[NAV] waypoint target: (");
+    Serial.print(target.x_mm, 0);
     Serial.print(", ");
-    Serial.print(waypoints[i].y_mm, 0);
+    Serial.print(target.y_mm, 0);
     Serial.print(") from (");
     Serial.print(x, 0);
     Serial.print(", ");
@@ -274,12 +288,14 @@ bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortI
 
     if (distance < NAV_WAYPOINT_TOLERANCE_MM) {
       Serial.println("[NAV] already within tolerance - skipping.");
+      obstacleClearAlert(); // this leg counts as done - don't leave the LED lit past it
+      if (isDetour) detourCount--; else nextIndex++;
       continue;
     }
 
     // Go-to-goal: face the goal (atan2 of the remaining vector), then
-    // drive straight to it. Same two primitives navRunDemoSequence()
-    // uses, just re-aimed at each waypoint in turn.
+    // drive toward it - now with obstacle avoidance, instead of a plain
+    // blind navDriveStraight() (see obstacleAvoid.h).
     float targetHeadingRad = atan2f(dy, dx);
     float turnDeg = wrapPi(targetHeadingRad - imu_headingRad()) * 180.0f / (float)M_PI;
 
@@ -288,16 +304,60 @@ bool navRunWaypointSequence(const NavWaypoint* waypoints, int count, bool abortI
     pidResetAll();
     imu_resetHeadingHold();
 
-    if (!navTurn(turnDeg))                            return false;
-    if (!navSettle(NAV_SETTLE_MS))                     return false;
-    if (!navDriveStraight(distance, NAV_DRIVE_SPEED))  return false;
-    if (!navSettle(NAV_SETTLE_MS))                     return false;
+    if (!navTurn(turnDeg))          return false;
+    if (!navSettle(NAV_SETTLE_MS))  return false;
 
-    // Advance the dead-reckoned pose by the leg we *commanded*
-    // (targetHeadingRad, distance) rather than re-sampling the IMU here —
-    // that's what navDriveStraight() actually held during the leg.
-    x += distance * cosf(targetHeadingRad);
-    y += distance * sinf(targetHeadingRad);
+    float distanceDriven = 0.0f;
+    ObstacleDriveResult driveResult =
+        driveStraightWithObstacleCheck(distance, NAV_DRIVE_SPEED, distanceDriven);
+
+    // Advance the dead-reckoned pose by what was ACTUALLY driven this
+    // leg (not the full commanded `distance`- a block can stop it early).
+    x += distanceDriven * cosf(targetHeadingRad);
+    y += distanceDriven * sinf(targetHeadingRad);
+
+    if (driveResult == OBSTACLE_DRIVE_ABORTED) return false;
+
+    if (driveResult == OBSTACLE_DRIVE_BLOCKED) {
+      // Something's in the way - scan for an opening and route around
+      // it with a temporary waypoint instead of giving up on the real
+      // target. Keeps rescanning if boxed in on both sides rather than
+      // aborting the whole sequence; navSettle() during the wait still
+      // polls navShouldAbort(), so CH2-down/E-stop/disarm/failsafe still
+      // breaks out of this immediately.
+      Serial.println("[NAV] obstacle ahead - scanning for an opening...");
+      float relDeg;
+      while (!obstacleFindOpening(relDeg)) {
+        Serial.println("[NAV] blocked on all sides - waiting, then rescanning...");
+        if (!navSettle(OBSTACLE_RETRY_WAIT_MS)) { obstacleClearAlert(); return false; }
+      }
+
+      float detourHeadingRad = imu_headingRad() + relDeg * (float)M_PI / 180.0f;
+      NavWaypoint detour;
+      detour.x_mm = x + OBSTACLE_AVOID_LEG_MM * cosf(detourHeadingRad);
+      detour.y_mm = y + OBSTACLE_AVOID_LEG_MM * sinf(detourHeadingRad);
+
+      if (detourCount >= MAX_DETOUR_DEPTH) {
+        Serial.println("[NAV] too many nested detours - giving up.");
+        stopAllMotors();
+        obstacleClearAlert();
+        return false;
+      }
+      detourStack[detourCount++] = detour;
+      Serial.print("[NAV] inserting temporary waypoint toward the opening: (");
+      Serial.print(detour.x_mm, 0);
+      Serial.print(", ");
+      Serial.print(detour.y_mm, 0);
+      Serial.println(")");
+      // Don't pop/advance - the target we were just aiming for (detour
+      // or real) is retried right after this new one is reached.
+      continue;
+    }
+
+    if (!navSettle(NAV_SETTLE_MS)) return false;
+
+    // Reached this target (detour or real) - pop/advance to the next one.
+    if (isDetour) detourCount--; else nextIndex++;
   }
 
   Serial.println("[NAV] waypoint sequence complete.");

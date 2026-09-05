@@ -49,7 +49,19 @@
 // hands control straight back to the joystick (see abortIfTriggerReleased
 // below) — no need to reach for a laptop/Serial once the RC link is the
 // only thing connected. 'w' over Serial runs the same waypoint list as a
-// bench-test fallback, and 'n' still runs the plain demo sequence.
+// bench-test fallback, and 'n' still runs the plain demo sequence. This
+// CH2 arm/abort mechanism is untouched by obstacle avoidance below — it
+// only ever gets *set* here, at the top of this function, exactly as
+// before.
+//
+// Each leg's straight-line portion now runs through
+// driveStraightWithObstacleCheck() (obstacleAvoid.h) instead of a plain
+// blind navDriveStraight(): if it stops early because something is in
+// the way, this function scans for an opening (obstacleFindOpening())
+// and inserts a TEMPORARY waypoint toward it ahead of the real target,
+// then continues the same loop - so the real destination is retried
+// (from the new position) right after the temporary one is reached,
+// rather than the detour being a dead end.
 // ============================================================
 
 // One 2D goal, in millimetres, relative to wherever the waypoint
@@ -58,6 +70,28 @@ struct NavWaypoint {
   float x_mm;
   float y_mm;
 };
+
+// --- Primitives shared with obstacleAvoid.cpp ---
+//
+// Pure visibility change (these were `static` i.e. private to this file)
+// so obstacleAvoid.cpp's driveStraightWithObstacleCheck() can reuse the
+// exact same abort-polling/drive-straight code navRunWaypointSequence()
+// runs on, instead of a second copy of it. No behavior changes, and
+// nothing outside this file sets s_abortOnTriggerRelease (the CH2-release
+// abort flag) - only navRunDemoSequence()/navRunWaypointSequence() do
+// that, once each, at their own entry, same as always.
+
+// Re-polls RC link / E-stop / arm state (and the CH2-release trigger, if
+// a nav*Sequence() call is currently running with abortIfTriggerReleased
+// = true). Returns true if the caller must stop right now.
+bool navShouldAbort();
+
+// Pause for `ms` while continuing to poll navShouldAbort() and imu_update().
+bool navSettle(unsigned long ms);
+
+// Drive straight (current heading held) until the A/B encoders show
+// distanceMM covered, at the given -1..1 speed.
+bool navDriveStraight(float distanceMM, float speed);
 
 // Runs the full straight -> turn -> straight sequence once.
 //   abortIfTriggerReleased : if true, releasing CH2 (the nav trigger
